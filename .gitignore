@@ -1,0 +1,23 @@
+# Virtual Environment
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+
+# Environment Variables / Secrets
+.env
+.env.local
+
+# OS-specific files (Crucial for multi-OS teams)
+.DS_Store
+Thumbs.db
+
+# Shiny/Python specific
+.shiny/
+.pytest_cache/
+
+# Data files (if any)
+*.csv
+*.xlsx
+*.parquet
