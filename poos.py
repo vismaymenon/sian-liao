@@ -1,5 +1,3 @@
-# poos.py
-
 import numpy as np
 import pandas as pd
 from typing import Callable
@@ -82,7 +80,7 @@ def poos_validation(
         _, y_train_actual, y_train_predicted, _, y_test_actual, y_test_predicted = method(X_window, y_window).values()
         std_error = np.std(y_train_actual - y_train_predicted)
 
-        test_indices.append(t)
+        test_indices.append(t + train_size)
         actuals.append(float(y_test_actual))
         preds_point.append(float(y_test_predicted))
         preds_50_lower.append(float(y_test_predicted) - 0.674 * std_error)
@@ -108,6 +106,52 @@ def poos_validation(
     return X.iloc[test_indices].copy(), y_df, rmse, mae
 
 
+# -- Plot results -----------
+
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+
+def plot_poos_results(y_full, y_df, title="POOS Forecast vs Actual", last_n=200):
+    fig, ax = plt.subplots(figsize=(14, 5))
+
+    # ── Trim full series to last n points ─────────────────────────────────────
+    y_plot = y_full.iloc[-last_n:].reset_index(drop=True)
+    offset = len(y_full) - last_n  # shift so indices align with y_df
+
+    ax.plot(
+        range(offset, offset + len(y_plot)),
+        y_plot.values,
+        color="black",
+        linewidth=1.2,
+        label="Actual (full sample)",
+        zorder=3
+    )
+
+    # ── Filter y_df to only indices within the last_n window ─────────────────
+    idx_mask = y_df.index >= offset
+    y_df_plot = y_df[idx_mask]
+    idx = y_df_plot.index
+
+    ax.plot(idx, y_df_plot["y_hat"], color="steelblue", linewidth=1.2,
+            linestyle="--", label="Predicted (OOS)", zorder=4)
+
+    ax.fill_between(idx, y_df_plot["pred_50_lower"], y_df_plot["pred_50_upper"],
+                    alpha=0.4, color="steelblue", label="50% CI")
+
+    ax.fill_between(idx, y_df_plot["pred_80_lower"], y_df_plot["pred_80_upper"],
+                    alpha=0.2, color="steelblue", label="80% CI")
+
+    ax.axvline(x=idx[0], color="grey", linestyle=":", linewidth=1, label="OOS start")
+
+    ax.set_title(title)
+    ax.set_xlabel("Time Index")
+    ax.set_ylabel("Value")
+    ax.legend(loc="upper left")
+    ax.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig("poos_plot.png", dpi=150, bbox_inches="tight")
+    plt.show()
+
 # ── Test ──────────────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
@@ -132,13 +176,15 @@ if __name__ == "__main__":
     print(f"Sample size: {len(y)}")
     print(f"Features:    {X.columns.tolist()}\n")
 
-    # Run POOS with benchmark model
+    # Run POOS with placeholder model
     X_out, y_out, rmse, mae = poos_validation(
         method=placeholder_model,
         X=X,
         y=y,
         prop_train=0.9,
     )
+
+    plot_poos_results(y, y_out, title="INDPRO — Benchmark Model POOS")
 
     print("=== POOS Results (first 5 rows) ===")
     print(y_out.head())
@@ -148,3 +194,5 @@ if __name__ == "__main__":
     print(f"\nOut-of-sample RMSE : {rmse:.6f}")
     print(f"Out-of-sample MAE  : {mae:.6f}")
     print(f"\nOOS observations   : {len(y_out)}")
+
+    
