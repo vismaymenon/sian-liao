@@ -27,12 +27,15 @@ import requests
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+from dotenv import load_dotenv
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import TimeSeriesSplit
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 
+load_dotenv()
+
 # ── Default config ──────────────────────────────────────────────────────────────
-FRED_API_KEY   = "4c68fd37456d1706c93321651fd0efa5"
+FRED_API_KEY   = os.getenv("FRED_API_KEY")
 SERIES_ID      = "A191RL1Q225SBEA"
 N_LAGS         = 4
 TEST_FRAC      = 0.10
