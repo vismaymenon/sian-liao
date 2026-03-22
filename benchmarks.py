@@ -6,7 +6,7 @@ import load_data
 import poos
 import autoregressive
 
-API_KEY = "cd30e8d67ebd36672d4b0ebfc5069427"
+API_KEY = ""
 series_id = "A191RL1Q225SBEA"  # Real GDP (quarterly, seasonally adjusted, chained 2012 dollars)
 
 # -- Load data 
