@@ -5,6 +5,10 @@ import pandas as pd
 from typing import Callable
 import load_data
 
+def print_results(dict):
+    for key, value in dict.items():
+        print(f"{key}: {value}")
+
 # ── Benchmark model ───────────────────────────────────────────────────────────
 
 def placeholder_model(X, y):
@@ -17,29 +21,30 @@ def placeholder_model(X, y):
         y : pd.Series,    shape (t+1,)              — last element is test
 
     Outputs:
-        coefficients     (pd.DataFrame) : 1-row df of NaNs (no real coeffs)
-        X                (pd.DataFrame) : training X
+        X_train          (pd.DataFrame) : training X
         y_actual         (np.ndarray)   : training y
         y_train_predicted(np.ndarray)   : in-sample predictions (all = mean)
+        X_test           (pd.DataFrame) : test X (last row of input X)
         y_test_actual    (float)        : held-out true value
         y_test_predicted (float)        : prediction = mean of training y
     """
     X_train = X.iloc[:-1]
     y_train = y.iloc[:-1].values
+    X_test = X.iloc[[-1]]
     y_test_actual = float(y.iloc[-1])
 
-    train_mean = float(np.mean(y_train))
+    y_train_mean = float(np.mean(y_train))
+    y_train_predicted = y_train_mean
+    y_test_predicted  = y_train_mean
 
-    coefficients = pd.DataFrame(
-        [[np.nan] * X_train.shape[1]],
-        columns=X_train.columns if hasattr(X_train, "columns") else range(X_train.shape[1])
-    )
-
-    y_train_predicted = np.full_like(y_train, fill_value=train_mean, dtype=float)
-    y_test_predicted  = train_mean
-
-    return coefficients, X_train, y_train, y_train_predicted, y_test_actual, y_test_predicted
-
+    return {
+        "X_train": X_train,
+        "y_train": y_train,
+        "y_train_predicted": y_train_predicted,
+        "X_test": X_test,
+        "y_test_actual": y_test_actual,
+        "y_test_predicted": y_test_predicted
+    }
 
 # ── POOS ──────────────────────────────────────────────────────────────────────
 
@@ -47,7 +52,7 @@ def poos_validation(
     method: Callable,
     X: pd.DataFrame | np.ndarray,
     y: pd.Series | np.ndarray,
-    min_train_size: float | int = 0.9,
+    prop_train: float = 0.9,
 ) -> tuple[pd.DataFrame, np.ndarray, pd.DataFrame]:
     """
     Pseudo Out-of-Sample (POOS) expanding-window validation.
@@ -66,45 +71,41 @@ def poos_validation(
     y = pd.Series(y).reset_index(drop=True)
     n = len(y)
 
-    # Resolve min_train_size to an integer index
-    if isinstance(min_train_size, float) and 0 < min_train_size < 1:
-        min_train_size = max(int(n * min_train_size), 2)
-    else:
-        min_train_size = int(min_train_size)
+    train_size = int(prop_train * n) if isinstance(prop_train, float) else 100 # with min train size as 100
+    test_indices, actuals = [], []
+    preds_point, preds_50_lower, preds_50_upper, preds_80_lower, preds_80_upper = [], [], [], [], []
 
-    if min_train_size >= n:
-        raise ValueError(f"min_train_size ({min_train_size}) must be < n ({n}).")
+    for t in range(n - train_size):
+        X_window = X.iloc[t:t+train_size+1]
+        y_window = y.iloc[t:t+train_size+1]
 
-    predictions, actuals, test_indices, all_coefficients = [], [], [], []
+        _, y_train_actual, y_train_predicted, _, y_test_actual, y_test_predicted = method(X_window, y_window).values()
+        std_error = np.std(y_train_actual - y_train_predicted)
 
-    for t in range(min_train_size, n):
-        X_window = X.iloc[: t + 1]   # rows 0..t  (last row = test)
-        y_window = y.iloc[: t + 1]
-
-        coefficients, _, _, _, y_test_actual, y_test_predicted = method(X_window, y_window)
-
-        predictions.append(float(y_test_predicted))
-        actuals.append(float(y_test_actual))
         test_indices.append(t)
-        all_coefficients.append(coefficients.iloc[0])
+        actuals.append(float(y_test_actual))
+        preds_point.append(float(y_test_predicted))
+        preds_50_lower.append(float(y_test_predicted) - 0.674 * std_error)
+        preds_50_upper.append(float(y_test_predicted) + 0.674 * std_error)
+        preds_80_lower.append(float(y_test_predicted) - 1.282 * std_error)
+        preds_80_upper.append(float(y_test_predicted) + 1.282 * std_error)
 
-    predictions = np.array(predictions)
-    actuals     = np.array(actuals)
-    errors      = actuals - predictions
-
-    y_actual_df = pd.DataFrame(
-        {
-            "y_hat":  predictions,
-            "y_-40":  predictions + np.quantile(errors, 0.10),
-            "y_-25":  predictions + np.quantile(errors, 0.25),
-            "y_25":   predictions + np.quantile(errors, 0.75),
-            "y_40":   predictions + np.quantile(errors, 0.90),
-            "y_true": actuals,
-        },
+    y_df = pd.DataFrame(
         index=test_indices,
+        data={
+            "y_true": actuals,
+            "y_hat": preds_point,
+            "pred_50_lower": preds_50_lower,
+            "pred_50_upper": preds_50_upper,
+            "pred_80_lower": preds_80_lower,
+            "pred_80_upper": preds_80_upper,
+        }
     )
 
-    return X.iloc[test_indices].copy(), predictions, y_actual_df
+    rmse = np.sqrt(np.mean((y_df["y_true"] - y_df["y_hat"]) ** 2))
+    mae  = np.mean(np.abs(y_df["y_true"] - y_df["y_hat"]))
+
+    return X.iloc[test_indices].copy(), y_df, rmse, mae
 
 
 # ── Test ──────────────────────────────────────────────────────────────────────
@@ -126,24 +127,24 @@ if __name__ == "__main__":
     # Align and drop NaNs
     df = pd.concat([X_df, y_series], axis=1).dropna()
     X = df.iloc[:, :-1].reset_index(drop=True)
-    y = df.iloc[:,  -1].reset_index(drop=True)
+    y = df.iloc[:, -1].reset_index(drop=True)
 
     print(f"Sample size: {len(y)}")
     print(f"Features:    {X.columns.tolist()}\n")
 
     # Run POOS with benchmark model
-    X_out, y_pred, y_actual_df = poos_validation(
+    X_out, y_out, rmse, mae = poos_validation(
         method=placeholder_model,
         X=X,
         y=y,
-        min_train_size=0.9,
+        prop_train=0.9,
     )
 
     print("=== POOS Results (first 5 rows) ===")
-    print(y_actual_df.head())
+    print(y_out.head())
 
-    rmse = np.sqrt(np.mean((y_actual_df["y_true"] - y_actual_df["y_hat"]) ** 2))
-    mae  = np.mean(np.abs(y_actual_df["y_true"] - y_actual_df["y_hat"]))
+    rmse = np.sqrt(np.mean((y_out["y_true"] - y_out["y_hat"]) ** 2))
+    mae  = np.mean(np.abs(y_out["y_true"] - y_out["y_hat"]))
     print(f"\nOut-of-sample RMSE : {rmse:.6f}")
     print(f"Out-of-sample MAE  : {mae:.6f}")
-    print(f"\nOOS observations   : {len(y_actual_df)}")
+    print(f"\nOOS observations   : {len(y_out)}")
