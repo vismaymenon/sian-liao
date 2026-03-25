@@ -6,7 +6,7 @@ import os
 from dotenv import load_dotenv
 
 load_dotenv() 
-API_KEY = os.getenv("API_KEY")
+API_KEY = os.getenv("FRED_API_KEY")
 
 
 def load_series_latest_release(series_id, api_key):  
@@ -121,18 +121,18 @@ fred_md = save_df(load_transformed_series_latest_release(drop_columns(
     load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/monthly/current.csv", skiprows=[1])).bfill(),
     get_fred_md_metadata(), 
     API_KEY
-), "data", "fred_md")
+), "../data", "fred_md")
 
 fred_qd = save_df(load_transformed_series_latest_release(drop_columns(
     load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/quarterly/current.csv", skiprows=[1, 2])).bfill(),
     get_fred_qd_metadata(), 
     API_KEY
-), "data", "fred_qd")
+), "../data", "fred_qd")
 
 #Remove target variable from FRED QD
-fred_qd_X = save_df(fred_qd.iloc[:, 1:], "data", "fred_qd_X")
+fred_qd_X = save_df(fred_qd.iloc[:, 1:], "../data", "fred_qd_X")
 
 #Save GDP target variable separately, add an additional transformation to convert to annualized growth rate
-gdp = save_df(fred_qd.iloc[:, 0]*400, "data", "gdp")
+gdp = save_df(fred_qd.iloc[:, 0]*400, "../data", "gdp")
 
 print(fred_md.head())
