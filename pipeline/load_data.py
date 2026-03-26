@@ -99,6 +99,10 @@ def drop_columns(df):
 
     return df
 
+def drop_empty_rows(df):
+    # Drop rows where all values are NaN
+    return df.dropna(how='all')
+
 def save_df(df, output_dir, file_name):
     base_dir = os.path.dirname(os.path.abspath(__file__))
     resolved_dir = os.path.join(base_dir, output_dir)
@@ -121,23 +125,23 @@ def save_df(df, output_dir, file_name):
 #     ).head())
 
 def main():
-    fred_md = save_df(load_transformed_series_latest_release(drop_columns(
-        load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/monthly/current.csv", skiprows=[1])).bfill(),
+    fred_md = save_df(drop_empty_rows(load_transformed_series_latest_release(drop_columns(
+        load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/monthly/current.csv", skiprows=[1])),
         get_fred_md_metadata(), 
         API_KEY
-    ), "../data", "fred_md")
+    )).bfill(), "../data", "fred_md")
 
-    fred_qd = save_df(load_transformed_series_latest_release(drop_columns(
-        load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/quarterly/current.csv", skiprows=[1, 2])).bfill(),
+    fred_qd = save_df(drop_empty_rows(load_transformed_series_latest_release(drop_columns(
+        load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/quarterly/current.csv", skiprows=[1, 2])),
         get_fred_qd_metadata(), 
         API_KEY
-    ), "../data", "fred_qd")
+    )).bfill(), "../data", "fred_qd")
 
     #Remove target variable from FRED QD
-    fred_qd_X = save_df(fred_qd.iloc[:, 1:], "../data", "fred_qd_X")
+    fred_qd_X = save_df(drop_empty_rows(fred_qd.iloc[:, 1:]), "../data", "fred_qd_X")
 
     #Save GDP target variable separately, add an additional transformation to convert to annualized growth rate
-    gdp = save_df(fred_qd.iloc[:, 0]*400, "../data", "gdp")
+    gdp = save_df(drop_empty_rows(fred_qd.iloc[:, 0]*400), "../data", "gdp")
     
     print("Data loading and transformation complete.")
 
