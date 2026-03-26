@@ -100,7 +100,10 @@ def drop_columns(df):
     return df
 
 def save_df(df, output_dir, file_name):
-    save_path = os.path.join(output_dir, f"{file_name}.csv")
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    resolved_dir = os.path.join(base_dir, output_dir)
+    os.makedirs(resolved_dir, exist_ok=True)
+    save_path = os.path.join(resolved_dir, f"{file_name}.csv")
     df.to_csv(save_path, header=True)
     print(f"  Saved to {save_path}")
     return df
@@ -117,22 +120,25 @@ def save_df(df, output_dir, file_name):
 #     API_KEY
 #     ).head())
 
-fred_md = save_df(load_transformed_series_latest_release(drop_columns(
-    load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/monthly/current.csv", skiprows=[1])).bfill(),
-    get_fred_md_metadata(), 
-    API_KEY
-), "../data", "fred_md")
+def main():
+    fred_md = save_df(load_transformed_series_latest_release(drop_columns(
+        load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/monthly/current.csv", skiprows=[1])).bfill(),
+        get_fred_md_metadata(), 
+        API_KEY
+    ), "../data", "fred_md")
 
-fred_qd = save_df(load_transformed_series_latest_release(drop_columns(
-    load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/quarterly/current.csv", skiprows=[1, 2])).bfill(),
-    get_fred_qd_metadata(), 
-    API_KEY
-), "../data", "fred_qd")
+    fred_qd = save_df(load_transformed_series_latest_release(drop_columns(
+        load_series("https://www.stlouisfed.org/-/media/project/frbstl/stlouisfed/research/fred-md/quarterly/current.csv", skiprows=[1, 2])).bfill(),
+        get_fred_qd_metadata(), 
+        API_KEY
+    ), "../data", "fred_qd")
 
-#Remove target variable from FRED QD
-fred_qd_X = save_df(fred_qd.iloc[:, 1:], "../data", "fred_qd_X")
+    #Remove target variable from FRED QD
+    fred_qd_X = save_df(fred_qd.iloc[:, 1:], "../data", "fred_qd_X")
 
-#Save GDP target variable separately, add an additional transformation to convert to annualized growth rate
-gdp = save_df(fred_qd.iloc[:, 0]*400, "../data", "gdp")
+    #Save GDP target variable separately, add an additional transformation to convert to annualized growth rate
+    gdp = save_df(fred_qd.iloc[:, 0]*400, "../data", "gdp")
+    
+    print("Data loading and transformation complete.")
 
-print(fred_md.head())
+if __name__ == "__main__":    main()
